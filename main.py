@@ -14,16 +14,16 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# --- ВЕБХУК: НОВАЯ ЗАЯВКА ---
+# --- ВЕБХУК: НОВАЯ ЗАЯВКА НА РЕГИСТРАЦИЮ МАСТЕРА ---
 async def handle_new_master(request):
     data = await request.json()
     master_name = data.get("name", "Новый мастер")
     master_id = data.get("id")
     if ADMIN_ID:
-        await bot.send_message(int(ADMIN_ID), f"🔔 Новая заявка!\nИмя: {master_name}\nID: {master_id}\nПроверьте в админ-панели приложения.")
+        await bot.send_message(int(ADMIN_ID), f"🔔 <b>Новая заявка мастера!</b>\n\nИмя: {master_name}\nID: {master_id}\n\nПроверьте в админ-панели приложения.", parse_mode="HTML")
     return web.Response(text="OK")
 
-# --- ВЕБХУК: ОДОБРЕНИЕ (НОВОЕ!) ---
+# --- ВЕБХУК: ОДОБРЕНИЕ МАСТЕРА АДМИНОМ ---
 async def handle_approve_master(request):
     data = await request.json()
     master_tg_id = data.get("telegram_id")
@@ -31,11 +31,42 @@ async def handle_approve_master(request):
         try:
             await bot.send_message(
                 int(master_tg_id), 
-                "🎉 <b>Поздравляем!</b>\n\nВаша анкета мастера одобрена. Теперь вы можете настроить свой профиль и принимать заказы в личном кабинете.",
+                "🎉 <b>Поздравляем!</b>\n\nВаша анкета мастера одобрена. Теперь вы можете настроить свой профиль, услуги и расписание в личном кабинете.",
                 parse_mode="HTML"
             )
         except Exception as e:
             logging.error(f"Error sending msg: {e}")
+    return web.Response(text="OK")
+
+# --- ВЕБХУК: ПОДТВЕРЖДЕНИЕ ЗАПИСИ КЛИЕНТУ ---
+async def handle_booking_confirmed(request):
+    data = await request.json()
+    client_tg_id = data.get("client_telegram_id")
+    master_name = data.get("master_name")
+    service = data.get("service_name")
+    date_time = f"{data.get('date')} в {data.get('time')}"
+    
+    if client_tg_id:
+        await bot.send_message(
+            int(client_tg_id), 
+            f"✅ <b>Запись подтверждена!</b>\n\nМастер <b>{master_name}</b> ждет вас на услугу '{service}'\n📅 {date_time}",
+            parse_mode="HTML"
+        )
+    return web.Response(text="OK")
+
+# --- ВЕБХУК: ОТКЛОНЕНИЕ ЗАПИСИ КЛИЕНТУ ---
+async def handle_booking_rejected(request):
+    data = await request.json()
+    client_tg_id = data.get("client_telegram_id")
+    master_name = data.get("master_name")
+    reason = data.get("reason", "Причина не указана")
+    
+    if client_tg_id:
+        await bot.send_message(
+            int(client_tg_id), 
+            f"❌ <b>Запись отклонена</b>\n\nМастер <b>{master_name}</b> не сможет принять вас.\n💬 Причина: {reason}",
+            parse_mode="HTML"
+        )
     return web.Response(text="OK")
 
 @dp.message(CommandStart())
@@ -47,8 +78,11 @@ async def start(message: types.Message):
 
 async def main():
     app = web.Application()
+    # Регистрация всех путей для уведомлений
     app.router.add_post("/webhook/new_master", handle_new_master)
-    app.router.add_post("/webhook/approve_master", handle_approve_master) # Регистрация нового пути
+    app.router.add_post("/webhook/approve_master", handle_approve_master)
+    app.router.add_post("/webhook/booking_confirmed", handle_booking_confirmed)
+    app.router.add_post("/webhook/booking_rejected", handle_booking_rejected)
     
     port = int(os.getenv("PORT", 10000))
     runner = web.AppRunner(app)
@@ -59,3 +93,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
